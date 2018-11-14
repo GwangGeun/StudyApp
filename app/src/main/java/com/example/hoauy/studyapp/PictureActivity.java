@@ -234,47 +234,59 @@ public class PictureActivity extends AppCompatActivity implements View.OnClickLi
             this.grantUriPermission("com.android.camera", photoUri,
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }
+        //photoUri 를 다른 앱 (crop 기능을 제공하는 앱) 에서도 사용할 수 있도록 권한 주기
+
         Intent intent = new Intent("com.android.camera.action.CROP");
         intent.setDataAndType(photoUri, "image/*");
+        // crop 의 대상이 되는 이미지 uri --> photoUri 지정
+        //
+        // (1) 앨범에서 오는 경우 : photoUri 는 onActivityResult()의 data.getData() 에서 지정되어서 온다.
+        // (2) 카메라에서 오는 경우 : photoUri 는 takephoto()에서 지정되어서 온다.
+        //                          이 경우, photoUri 는 카메라 촬영으로 저장된 사진의 위치
+
 
         List<ResolveInfo> list = getPackageManager().queryIntentActivities(intent, 0);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             grantUriPermission(list.get(0).activityInfo.packageName, photoUri,
                     Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
         }
+        // crop 기능을 수행 할 수 있는 다른 앱이 있는지 확인
+
         int size = list.size();
         if (size == 0) {
             Toast.makeText(this, "취소 되었습니다.", Toast.LENGTH_SHORT).show();
             return;
-        } else {
+        }
+        // crop 기능을 수행 할 수 있는 앱이 없으면 return.
+
+        else {
             Toast.makeText(this, "용량이 큰 사진의 경우 시간이 오래 걸릴 수 있습니다.", Toast.LENGTH_SHORT).show();
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 intent.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
             }
+
             intent.putExtra("crop", "true");
             intent.putExtra("aspectX", 1);
             intent.putExtra("aspectY", 1);
             intent.putExtra("scale", true);
+            // crop 기능 수행하기 위한 intent setting
+
             File croppedFileName = null;
 
             try {
                 croppedFileName = createImageFile(2);
                 // crop 된 이미지를 저장할 파일을 생성하려 할 경우에는 "인자" 가 "1" 을 제외한 int 형의 숫자여야 함.
 
+                photoUri = FileProvider.getUriForFile(PictureActivity.this,
+                        "com.example.hoauy.studyapp.fileprovider", croppedFileName);
+                // crop 의 결과물이 저장될 위치
+
             } catch (IOException e) {
                 e.printStackTrace();
             }
 
-            String temp =   Environment.getExternalStorageDirectory().getAbsolutePath()
-                    + "/DCIM/StudyApp";
-
-            File folder = new File(temp);
-            File tempFile = new File(folder.toString(), croppedFileName.getName());
-
-            photoUri = FileProvider.getUriForFile(PictureActivity.this,
-                    "com.example.hoauy.studyapp.fileprovider", tempFile);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -282,26 +294,26 @@ public class PictureActivity extends AppCompatActivity implements View.OnClickLi
             }
 
             intent.putExtra("return-data", false);
-            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+            intent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri); // crop 의 결과물을 photoUri 에 나타내라
             intent.putExtra("outputFormat", Bitmap.CompressFormat.JPEG.toString());
 
             Intent i = new Intent(intent);
             ResolveInfo res = list.get(0);
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+
                 i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-
                 grantUriPermission(res.activityInfo.packageName, photoUri,
                         Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_READ_URI_PERMISSION);
             }
             i.setComponent(new ComponentName(res.activityInfo.packageName, res.activityInfo.name));
-
-
+            //crop 기능을 수행 할 수 있는 앱에 crop image 가 저장될 photoUri 를 담아서 보내기
 
             startActivityForResult(i, CROP_FROM_CAMERA);
         }
     }
-
+    // crop 메소드 끝.
 
     public static void addImageToGallery(final String filePath, final Context context) {
         ContentValues values = new ContentValues();
@@ -310,5 +322,16 @@ public class PictureActivity extends AppCompatActivity implements View.OnClickLi
         values.put(MediaStore.MediaColumns.DATA, filePath);
         context.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
     }
+    // crop 된 이미지를 갤러리에 저장하고, 갱신해주기 ( 갱신해주지 않으면 파일은 저장되어도 갤러리에 바로 보이지 않음 )
+    //
+    // (1) fileprovider 로 생성된 uri 는 앞의 부분이 "file://" 이 아니라 " content://" 형식을 띄고 있음
+    // (2) (1) 과 같은 content 형식의 uri 를 받아오는 경우 기존 블로그에 돌아다니는 소스로는 갤러리 갱신이 되지 않았음
+    // (3) 이를 해결하려면 getContentResolver()에, File(내가 생성한 파일).toString() 를 포함한 위의 데이터들을 첨부해서 insert 해줘야 함.
+    //
+    //  < 참고 >
+    //
+    //  안드로이드 4대 컴포넌트 중 하나인 content provider 및 contentResolver 에 대한 설명이 있는 곳
+    //  http://mainia.tistory.com/4924
+
 
 }
